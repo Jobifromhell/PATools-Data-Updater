@@ -20,9 +20,9 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 
 ## Configuring Paths
 
-1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Browse…** control in the metadata section (or the **Open** toolbar button) to load an existing `ampload.json` or `prealignment.json`. Once selected you can reload from disk at any time with the **Reload** button.
-2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`.
-3. **Release notes** – Switch to **Release Notes** and choose the `ReleaseNotes.md` file. New publish actions append entries automatically.
+1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Browse…** control in the metadata section (or the **Open** toolbar button) to load an existing `ampload.json` or `prealignment.json`. Once selected you can reload from disk at any time with the **Reload** button. The app remembers the last chosen paths so they re-open automatically on launch when the files are still available.
+2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`. Your selection is persisted between launches.
+3. **Release notes** – Switch to **Release Notes** and choose the `ReleaseNotes.md` file. New publish actions append entries automatically, and the viewer restores the last used file the next time the app starts.
 
 ## Editing Data
 
@@ -46,7 +46,7 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 
 Configure Git settings in **Settings**:
 
-- **Repository Path** – Path to the local git repository containing the datasets and manifest.
+- **Repository Path** – Path to the local git repository containing the datasets and manifest. If the path is missing or incorrect the app now surfaces a descriptive error instead of the generic “data couldn't be read” message.
 - **Remote** – Remote name or HTTPS URL. When an HTTPS URL is provided, the personal access token (PAT) is embedded automatically.
 - **Branch** – Target branch for pushes.
 - **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS. When an HTTPS remote is detected the app em

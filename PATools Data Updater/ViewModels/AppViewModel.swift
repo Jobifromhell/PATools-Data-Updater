@@ -11,13 +11,30 @@ final class AppViewModel: ObservableObject {
         didSet { if !suppressPreDirtyFlag { prealignmentDirty = true } }
     }
 
-    @Published var ampLoadFileURL: URL?
-    @Published var prealignmentFileURL: URL?
-    @Published var manifestURL: URL?
-    @Published var releaseNotesURL: URL?
+    @Published var ampLoadFileURL: URL? {
+        didSet { persistURL(ampLoadFileURL, key: DefaultsKeys.ampLoadFileURL) }
+    }
+    @Published var prealignmentFileURL: URL? {
+        didSet { persistURL(prealignmentFileURL, key: DefaultsKeys.prealignmentFileURL) }
+    }
+    @Published var manifestURL: URL? {
+        didSet { persistURL(manifestURL, key: DefaultsKeys.manifestURL) }
+    }
+    @Published var releaseNotesURL: URL? {
+        didSet {
+            persistURL(releaseNotesURL, key: DefaultsKeys.releaseNotesURL)
+            if !isRestoringState, releaseNotesURL != oldValue {
+                reloadReleaseNotes()
+            }
+        }
+    }
 
-    @Published var ampLoadDatasetId: String = "ampload"
-    @Published var prealignmentDatasetId: String = "prealignment"
+    @Published var ampLoadDatasetId: String = "ampload" {
+        didSet { persistString(ampLoadDatasetId, key: DefaultsKeys.ampLoadDatasetId) }
+    }
+    @Published var prealignmentDatasetId: String = "prealignment" {
+        didSet { persistString(prealignmentDatasetId, key: DefaultsKeys.prealignmentDatasetId) }
+    }
 
     @Published var manifestChecksumPreview: String = ""
     @Published var manifestPathPreview: String = ""
@@ -25,18 +42,26 @@ final class AppViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var statusMessage: String = ""
     @Published var publishNotes: String = ""
-    @Published var shouldBumpVersion: Bool = true
-    @Published var shouldUpdateManifestPath: Bool = true
-    @Published var gitConfiguration = GitConfiguration()
+    @Published var shouldBumpVersion: Bool = true {
+        didSet { persistBool(shouldBumpVersion, key: DefaultsKeys.shouldBumpVersion) }
+    }
+    @Published var shouldUpdateManifestPath: Bool = true {
+        didSet { persistBool(shouldUpdateManifestPath, key: DefaultsKeys.shouldUpdateManifestPath) }
+    }
+    @Published var gitConfiguration = GitConfiguration() {
+        didSet { persistGitConfiguration() }
+    }
     @Published var gitOutput: [String] = []
 
     private let fileService: DatasetFileService
     private let manifestService: ManifestService
     private let releaseNotesService: ReleaseNotesService
     private let gitService: GitService
+    private let defaults: UserDefaults
 
     private var suppressAmpDirtyFlag = false
     private var suppressPreDirtyFlag = false
+    private var isRestoringState = false
 
     @Published private(set) var ampLoadDirty = false
     @Published private(set) var prealignmentDirty = false
@@ -44,13 +69,16 @@ final class AppViewModel: ObservableObject {
     init(fileService: DatasetFileService = DatasetFileService(),
          manifestService: ManifestService = ManifestService(),
          releaseNotesService: ReleaseNotesService = ReleaseNotesService(),
-         gitService: GitService = GitService()) {
+         gitService: GitService = GitService(),
+         defaults: UserDefaults = .standard) {
         self.fileService = fileService
         self.manifestService = manifestService
         self.releaseNotesService = releaseNotesService
         self.gitService = gitService
+        self.defaults = defaults
         self.ampLoadDataset = AmpLoadDataset.empty()
         self.prealignmentDataset = PrealignmentDataset.empty()
+        restorePersistedState()
     }
 
     var hasUnsavedChanges: Bool {
@@ -114,7 +142,6 @@ final class AppViewModel: ObservableObject {
         presentSavePanel(title: "Select ReleaseNotes.md", nameField: "ReleaseNotes.md") { [weak self] url in
             guard let self else { return }
             self.releaseNotesURL = url
-            self.reloadReleaseNotes()
         }
     }
 
@@ -295,4 +322,102 @@ final class AppViewModel: ObservableObject {
             completion(url)
         }
     }
+
+    private func restorePersistedState() {
+        isRestoringState = true
+        defer { isRestoringState = false }
+
+        if let storedAmpURL = defaults.url(forKey: DefaultsKeys.ampLoadFileURL) {
+            if FileManager.default.fileExists(atPath: storedAmpURL.path) {
+                loadAmpLoad(from: storedAmpURL)
+            } else {
+                ampLoadFileURL = storedAmpURL
+            }
+        }
+
+        if let storedPrealignmentURL = defaults.url(forKey: DefaultsKeys.prealignmentFileURL) {
+            if FileManager.default.fileExists(atPath: storedPrealignmentURL.path) {
+                loadPrealignment(from: storedPrealignmentURL)
+            } else {
+                prealignmentFileURL = storedPrealignmentURL
+            }
+        }
+
+        manifestURL = defaults.url(forKey: DefaultsKeys.manifestURL)
+        releaseNotesURL = defaults.url(forKey: DefaultsKeys.releaseNotesURL)
+        if let releaseNotesURL, FileManager.default.fileExists(atPath: releaseNotesURL.path) {
+            reloadReleaseNotes()
+        }
+
+        if let ampId = defaults.string(forKey: DefaultsKeys.ampLoadDatasetId) {
+            ampLoadDatasetId = ampId
+        }
+        if let preId = defaults.string(forKey: DefaultsKeys.prealignmentDatasetId) {
+            prealignmentDatasetId = preId
+        }
+        if defaults.object(forKey: DefaultsKeys.shouldBumpVersion) != nil {
+            shouldBumpVersion = defaults.bool(forKey: DefaultsKeys.shouldBumpVersion)
+        }
+        if defaults.object(forKey: DefaultsKeys.shouldUpdateManifestPath) != nil {
+            shouldUpdateManifestPath = defaults.bool(forKey: DefaultsKeys.shouldUpdateManifestPath)
+        }
+
+        let repoPath = defaults.string(forKey: DefaultsKeys.gitRepositoryPath) ?? ""
+        let defaultGitConfiguration = GitConfiguration()
+        let remote = defaults.string(forKey: DefaultsKeys.gitRemote) ?? defaultGitConfiguration.remote
+        let branch = defaults.string(forKey: DefaultsKeys.gitBranch) ?? defaultGitConfiguration.branch
+        let token = defaults.string(forKey: DefaultsKeys.gitToken) ?? ""
+        let pushAutomatically = defaults.object(forKey: DefaultsKeys.gitPushAutomatically) as? Bool ?? defaultGitConfiguration.pushAutomatically
+        gitConfiguration = GitConfiguration(
+            repositoryPath: repoPath,
+            remote: remote,
+            branch: branch,
+            personalAccessToken: token,
+            pushAutomatically: pushAutomatically
+        )
+    }
+
+    private func persistURL(_ url: URL?, key: String) {
+        guard !isRestoringState else { return }
+        if let url {
+            defaults.set(url, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    private func persistString(_ value: String, key: String) {
+        guard !isRestoringState else { return }
+        defaults.set(value, forKey: key)
+    }
+
+    private func persistBool(_ value: Bool, key: String) {
+        guard !isRestoringState else { return }
+        defaults.set(value, forKey: key)
+    }
+
+    private func persistGitConfiguration() {
+        guard !isRestoringState else { return }
+        defaults.set(gitConfiguration.repositoryPath, forKey: DefaultsKeys.gitRepositoryPath)
+        defaults.set(gitConfiguration.remote, forKey: DefaultsKeys.gitRemote)
+        defaults.set(gitConfiguration.branch, forKey: DefaultsKeys.gitBranch)
+        defaults.set(gitConfiguration.personalAccessToken, forKey: DefaultsKeys.gitToken)
+        defaults.set(gitConfiguration.pushAutomatically, forKey: DefaultsKeys.gitPushAutomatically)
+    }
+}
+
+private enum DefaultsKeys {
+    static let ampLoadFileURL = "AmpLoadFileURL"
+    static let prealignmentFileURL = "PrealignmentFileURL"
+    static let manifestURL = "ManifestFileURL"
+    static let releaseNotesURL = "ReleaseNotesFileURL"
+    static let ampLoadDatasetId = "AmpLoadDatasetId"
+    static let prealignmentDatasetId = "PrealignmentDatasetId"
+    static let shouldBumpVersion = "ShouldBumpVersion"
+    static let shouldUpdateManifestPath = "ShouldUpdateManifestPath"
+    static let gitRepositoryPath = "GitRepositoryPath"
+    static let gitRemote = "GitRemote"
+    static let gitBranch = "GitBranch"
+    static let gitToken = "GitToken"
+    static let gitPushAutomatically = "GitPushAutomatically"
 }

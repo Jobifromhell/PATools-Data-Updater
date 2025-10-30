@@ -69,6 +69,17 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         XCTAssertEqual(manifest.datasets["ampload"]?.version, "2.0")
     }
 
+    func testGitServiceRepositoryMissingShowsHelpfulError() {
+        let service = GitService()
+        let configuration = GitConfiguration(repositoryPath: "/tmp/does/not/exist", remote: "origin", branch: "main")
+        XCTAssertThrowsError(try service.commitAndPush(files: [], message: "Test", configuration: configuration)) { error in
+            guard case let GitServiceError.repositoryNotFound(path) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, "/tmp/does/not/exist")
+        }
+    }
+
     private func temporaryURL(named name: String) -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

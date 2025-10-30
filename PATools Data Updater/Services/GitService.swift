@@ -42,6 +42,9 @@ final class GitService {
     }
 
     private func runGit(arguments: [String], configuration: GitConfiguration) throws -> String {
+        guard FileManager.default.fileExists(atPath: configuration.repositoryPath) else {
+            throw GitServiceError.repositoryNotFound(path: configuration.repositoryPath)
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["git"] + arguments
@@ -57,7 +60,11 @@ final class GitService {
         process.standardOutput = pipe
         process.standardError = pipe
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            throw GitServiceError.processLaunchFailed(underlyingError: error)
+        }
         process.waitUntilExit()
 
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
@@ -85,11 +92,17 @@ private extension GitConfiguration {
 
 enum GitServiceError: LocalizedError {
     case commandFailed(arguments: [String], output: String)
+    case repositoryNotFound(path: String)
+    case processLaunchFailed(underlyingError: Error)
 
     var errorDescription: String? {
         switch self {
         case let .commandFailed(arguments, output):
             return "git \(arguments.joined(separator: " ")) failed: \(output)"
+        case let .repositoryNotFound(path):
+            return "Git repository not found at path: \(path). Update the repository path in Settings."
+        case let .processLaunchFailed(error):
+            return "Failed to launch git: \(error.localizedDescription)"
         }
     }
 }
