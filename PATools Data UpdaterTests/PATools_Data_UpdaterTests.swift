@@ -43,11 +43,30 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         let service = ManifestService(fileService: DatasetFileService(), checksumService: ChecksumService())
         let result = try service.updateManifest(at: manifestURL, datasetURL: datasetURL, datasetId: "ampload", version: "1.0", updatePath: true)
         XCTAssertEqual(result.manifest.datasets.count, 1)
-        XCTAssertEqual(result.manifest.datasets.first?.id, "ampload")
-        XCTAssertEqual(result.manifest.datasets.first?.version, "1.0")
-        XCTAssertEqual(result.manifest.datasets.first?.path, datasetURL.path)
+        let entry = result.manifest.datasets["ampload"]
+        XCTAssertEqual(entry?.version, "1.0")
+        XCTAssertEqual(entry?.path, datasetURL.path)
         let persisted = try DatasetFileService().loadManifest(from: manifestURL)
         XCTAssertEqual(persisted, result.manifest)
+        let savedString = String(data: try Data(contentsOf: manifestURL), encoding: .utf8)
+        XCTAssertTrue(savedString?.contains("\"datasets\"") == true)
+    }
+
+    func testManifestDecodingSupportsDictionaryFormat() throws {
+        let json = """
+        {
+          "ampload": {
+            "path": "/tmp/ampload.json",
+            "version": "2.0",
+            "checksum": "abc123"
+          }
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+        let manifest = try DatasetFileService().loadManifest(from: url)
+        XCTAssertEqual(manifest.datasets.count, 1)
+        XCTAssertEqual(manifest.datasets["ampload"]?.version, "2.0")
     }
 
     private func temporaryURL(named name: String) -> URL {

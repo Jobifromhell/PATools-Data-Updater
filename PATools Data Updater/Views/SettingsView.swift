@@ -17,6 +17,10 @@ struct SettingsView: View {
                     Label("Last checksum: \(viewModel.manifestChecksumPreview)", systemImage: "doc.append")
                         .font(.footnote)
                 }
+                if !viewModel.manifestPathPreview.isEmpty {
+                    Label("Tracked path: \(viewModel.manifestPathPreview)", systemImage: "folder")
+                        .font(.footnote)
+                }
             }
 
             Section(header: Text("Git")) {

@@ -75,7 +75,10 @@ private extension GitConfiguration {
         guard remote.lowercased().hasPrefix("http"), !personalAccessToken.isEmpty else { return nil }
         guard let url = URL(string: remote) else { return nil }
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
-        components.user = personalAccessToken
+        if components.user == nil || components.user?.isEmpty == true {
+            components.user = "x-access-token"
+        }
+        components.password = personalAccessToken
         return components.url?.absoluteString
     }
 }

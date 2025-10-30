@@ -20,6 +20,7 @@ final class AppViewModel: ObservableObject {
     @Published var prealignmentDatasetId: String = "prealignment"
 
     @Published var manifestChecksumPreview: String = ""
+    @Published var manifestPathPreview: String = ""
     @Published var validationMessages: [ValidationIssue] = []
     @Published var errorMessage: String?
     @Published var statusMessage: String = ""
@@ -193,6 +194,9 @@ final class AppViewModel: ObservableObject {
             if let manifestURL {
                 manifestResult = try manifestService.updateManifest(at: manifestURL, datasetURL: datasetURL, datasetId: datasetId, version: shouldBumpVersion ? datasetVersion : nil, updatePath: shouldUpdateManifestPath)
                 manifestChecksumPreview = manifestResult?.checksum ?? ""
+                if let path = manifestResult?.entry?.path, !path.isEmpty {
+                    manifestPathPreview = path
+                }
             }
 
             if let releaseNotesURL {

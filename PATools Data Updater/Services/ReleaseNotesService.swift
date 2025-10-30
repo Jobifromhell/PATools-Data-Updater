@@ -30,6 +30,10 @@ final class ReleaseNotesService {
     }
 
     func loadEntries(from url: URL) throws -> [ReleaseNoteEntry] {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: url.path) else {
+            return []
+        }
         let data = try String(contentsOf: url)
         var entries: [ReleaseNoteEntry] = []
         let sections = data.components(separatedBy: "\n## ").map { section -> String in

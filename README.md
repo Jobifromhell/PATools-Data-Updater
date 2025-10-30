@@ -8,7 +8,8 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 - Inline validation to ensure required fields and numeric ranges are respected before publishing.
 - Dataset metadata management including version editing and dataset identifiers.
 - Release notes integration that appends publish summaries to `ReleaseNotes.md` and displays existing history with filtering by dataset.
-- Manifest management with SHA-256 checksum calculation, optional version bumping, and manifest entry updates.
+- Manifest management with SHA-256 checksum calculation, optional version bumping, manifest entry updates, and inline checksum/
+  path previews in the UI.
 - Git automation capable of staging, committing, and optionally pushing dataset changes.
 - Undo/redo support via macOS standard keyboard shortcuts.
 
@@ -48,7 +49,8 @@ Configure Git settings in **Settings**:
 - **Repository Path** – Path to the local git repository containing the datasets and manifest.
 - **Remote** – Remote name or HTTPS URL. When an HTTPS URL is provided, the personal access token (PAT) is embedded automatically.
 - **Branch** – Target branch for pushes.
-- **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS.
+- **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS. When an HTTPS remote is detected the app em
+beds the token alongside the `x-access-token` user so GitHub fine-grained tokens work without additional configuration.
 - **Push automatically** – Enable to push after each publish. Otherwise only commits are created.
 
 Git commands executed:

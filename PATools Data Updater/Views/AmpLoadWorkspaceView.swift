@@ -127,6 +127,10 @@ struct AmpLoadWorkspaceView: View {
                     Label("Checksum: \(viewModel.manifestChecksumPreview)", systemImage: "checkmark.shield")
                         .font(.footnote)
                 }
+                if !viewModel.manifestPathPreview.isEmpty {
+                    Label("Manifest path: \(viewModel.manifestPathPreview)", systemImage: "folder")
+                        .font(.footnote)
+                }
             }
         }
     }

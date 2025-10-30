@@ -20,11 +20,13 @@ final class ManifestService {
         let newPath = updatePath ? datasetURL.path : nil
         manifest.updateEntry(for: datasetId, checksum: checksum, version: version, path: newPath)
         try fileService.saveManifest(manifest, to: manifestURL)
-        return ManifestUpdateResult(manifest: manifest, checksum: checksum)
+        let entry = manifest.datasets[datasetId]
+        return ManifestUpdateResult(manifest: manifest, checksum: checksum, entry: entry)
     }
 }
 
 struct ManifestUpdateResult {
     let manifest: Manifest
     let checksum: String
+    let entry: ManifestEntry?
 }
