@@ -12,6 +12,7 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
   path previews in the UI.
 - Git automation capable of staging, committing, and optionally pushing dataset changes.
 - Undo/redo support via macOS standard keyboard shortcuts.
+- Persistent security-scoped access to dataset, manifest, release note, and repository selections so paths continue working across launches without additional permission prompts.
 
 ## Getting Started
 
@@ -20,9 +21,10 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 
 ## Configuring Paths
 
-1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Browse…** control in the metadata section (or the **Open** toolbar button) to load an existing `ampload.json` or `prealignment.json`. Once selected you can reload from disk at any time with the **Reload** button. The app remembers the last chosen paths so they re-open automatically on launch when the files are still available.
-2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`. Your selection is persisted between launches.
+1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Browse…** control in the metadata section (or the **Open** toolbar button) to load an existing `ampload.json` or `prealignment.json`. Once selected you can reload from disk at any time with the **Reload** button. The app remembers the last chosen paths so they re-open automatically on launch when the files are still available. Using the built-in file pickers stores a security-scoped bookmark so the sandbox keeps permission to the file.
+2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`. Selecting the file via the picker is recommended so the sandbox retains permission after relaunches.
 3. **Release notes** – Switch to **Release Notes** and choose the `ReleaseNotes.md` file. New publish actions append entries automatically, and the viewer restores the last used file the next time the app starts.
+4. **Git repository** – In **Settings** use **Browse…** next to the repository path to grant the app access to the working copy. The chosen directory is stored securely and reused each time you reopen the app.
 
 ## Editing Data
 
@@ -46,14 +48,14 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 
 Configure Git settings in **Settings**:
 
-- **Repository Path** – Path to the local git repository containing the datasets and manifest. If the path is missing or incorrect the app now surfaces a descriptive error instead of the generic “data couldn't be read” message.
+- **Repository Path** – Path to the local git repository containing the datasets and manifest. Use **Browse…** to pick the folder and grant the sandbox long-lived access. If the path is missing or incorrect the app now surfaces a descriptive error instead of the generic “data couldn't be read” message.
 - **Remote** – Remote name or HTTPS URL. When an HTTPS URL is provided, the personal access token (PAT) is embedded automatically.
 - **Branch** – Target branch for pushes.
-- **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS. When an HTTPS remote is detected the app em
-beds the token alongside the `x-access-token` user so GitHub fine-grained tokens work without additional configuration.
+- **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS. When an HTTPS remote is detected the app embeds the token alongside the `x-access-token` user so GitHub fine-grained tokens work without additional configuration.
 - **Push automatically** – Enable to push after each publish. Otherwise only commits are created.
+- **Test Connection** – Runs `git ls-remote` against the configured remote to confirm connectivity and credentials. Output and success/failure messages appear directly in Settings.
 
-Git commands executed:
+Git commands executed when publishing:
 
 ```bash
 git add <files>
@@ -61,11 +63,11 @@ git commit -m "Publish <dataset> v<version>"
 git push <remote> <branch>
 ```
 
-Logs appear inside the publish panel after a successful run.
+Logs appear inside the publish panel and the Settings view after a successful run.
 
 ## Unit Tests
 
-Unit tests cover JSON encoding/decoding, checksum generation, and manifest updates. Run them with:
+Unit tests cover JSON encoding/decoding, checksum generation, manifest updates, and git connectivity. Run them with:
 
 ```bash
 xcodebuild test -scheme "PATools Data Updater" -destination 'platform=macOS'

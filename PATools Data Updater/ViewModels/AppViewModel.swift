@@ -41,6 +41,8 @@ final class AppViewModel: ObservableObject {
     @Published var validationMessages: [ValidationIssue] = []
     @Published var errorMessage: String?
     @Published var statusMessage: String = ""
+    @Published var gitStatusMessage: String = ""
+    @Published var gitErrorMessage: String?
     @Published var publishNotes: String = ""
     @Published var shouldBumpVersion: Bool = true {
         didSet { persistBool(shouldBumpVersion, key: DefaultsKeys.shouldBumpVersion) }
@@ -49,7 +51,25 @@ final class AppViewModel: ObservableObject {
         didSet { persistBool(shouldUpdateManifestPath, key: DefaultsKeys.shouldUpdateManifestPath) }
     }
     @Published var gitConfiguration = GitConfiguration() {
-        didSet { persistGitConfiguration() }
+        didSet {
+            if !isUpdatingRepositoryPath,
+               let bookmarkURL = gitRepositoryURL,
+               bookmarkURL.path != gitConfiguration.repositoryPath {
+                gitRepositoryURL = nil
+            }
+            persistGitConfiguration()
+        }
+    }
+    @Published var gitRepositoryURL: URL? {
+        didSet {
+            guard gitRepositoryURL != oldValue else { return }
+            persistURL(gitRepositoryURL, key: DefaultsKeys.gitRepositoryURL)
+            if let path = gitRepositoryURL?.path {
+                isUpdatingRepositoryPath = true
+                gitConfiguration.repositoryPath = path
+                isUpdatingRepositoryPath = false
+            }
+        }
     }
     @Published var gitOutput: [String] = []
 
@@ -62,6 +82,7 @@ final class AppViewModel: ObservableObject {
     private var suppressAmpDirtyFlag = false
     private var suppressPreDirtyFlag = false
     private var isRestoringState = false
+    private var isUpdatingRepositoryPath = false
 
     @Published private(set) var ampLoadDirty = false
     @Published private(set) var prealignmentDirty = false
@@ -145,13 +166,21 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func selectGitRepository() {
+        presentOpenPanel(title: "Select Git Repository", canChooseDirectories: true, allowsFiles: false) { [weak self] url in
+            self?.gitRepositoryURL = url
+        }
+    }
+
     func saveAmpLoad() {
         guard let url = ampLoadFileURL else {
             errorMessage = "Select an ampload.json file first."
             return
         }
         do {
-            try fileService.saveAmpLoad(ampLoadDataset, to: url)
+            try withSecurityScopedAccess(to: [url]) {
+                try fileService.saveAmpLoad(ampLoadDataset, to: url)
+            }
             ampLoadDirty = false
             statusMessage = "Saved ampload.json"
         } catch {
@@ -165,7 +194,9 @@ final class AppViewModel: ObservableObject {
             return
         }
         do {
-            try fileService.savePrealignment(prealignmentDataset, to: url)
+            try withSecurityScopedAccess(to: [url]) {
+                try fileService.savePrealignment(prealignmentDataset, to: url)
+            }
             prealignmentDirty = false
             statusMessage = "Saved prealignment.json"
         } catch {
@@ -177,6 +208,8 @@ final class AppViewModel: ObservableObject {
         validationMessages = []
         errorMessage = nil
         statusMessage = ""
+        gitStatusMessage = ""
+        gitErrorMessage = nil
         gitOutput.removeAll()
 
         let datasetURL: URL?
@@ -208,18 +241,28 @@ final class AppViewModel: ObservableObject {
         }
 
         do {
-            switch dataset {
-            case .ampLoad:
-                try fileService.saveAmpLoad(ampLoadDataset, to: datasetURL)
-                ampLoadDirty = false
-            case .prealignment:
-                try fileService.savePrealignment(prealignmentDataset, to: datasetURL)
-                prealignmentDirty = false
+            try withSecurityScopedAccess(to: [datasetURL]) {
+                switch dataset {
+                case .ampLoad:
+                    try fileService.saveAmpLoad(ampLoadDataset, to: datasetURL)
+                    ampLoadDirty = false
+                case .prealignment:
+                    try fileService.savePrealignment(prealignmentDataset, to: datasetURL)
+                    prealignmentDirty = false
+                }
             }
 
             var manifestResult: ManifestUpdateResult?
             if let manifestURL {
-                manifestResult = try manifestService.updateManifest(at: manifestURL, datasetURL: datasetURL, datasetId: datasetId, version: shouldBumpVersion ? datasetVersion : nil, updatePath: shouldUpdateManifestPath)
+                try withSecurityScopedAccess(to: [manifestURL, datasetURL]) {
+                    manifestResult = try manifestService.updateManifest(
+                        at: manifestURL,
+                        datasetURL: datasetURL,
+                        datasetId: datasetId,
+                        version: shouldBumpVersion ? datasetVersion : nil,
+                        updatePath: shouldUpdateManifestPath
+                    )
+                }
                 manifestChecksumPreview = manifestResult?.checksum ?? ""
                 if let path = manifestResult?.entry?.path, !path.isEmpty {
                     manifestPathPreview = path
@@ -227,7 +270,15 @@ final class AppViewModel: ObservableObject {
             }
 
             if let releaseNotesURL {
-                try releaseNotesService.appendEntry(datasetId: datasetId, version: datasetVersion, date: Date(), notes: publishNotes, to: releaseNotesURL)
+                try withSecurityScopedAccess(to: [releaseNotesURL]) {
+                    try releaseNotesService.appendEntry(
+                        datasetId: datasetId,
+                        version: datasetVersion,
+                        date: Date(),
+                        notes: publishNotes,
+                        to: releaseNotesURL
+                    )
+                }
                 reloadReleaseNotes()
             }
 
@@ -236,14 +287,28 @@ final class AppViewModel: ObservableObject {
                 var filesToCommit: [URL] = [datasetURL]
                 if let manifestURL { filesToCommit.append(manifestURL) }
                 if let releaseNotesURL { filesToCommit.append(releaseNotesURL) }
+                var securityURLs = filesToCommit
+                if let repoURL = gitRepositoryURL {
+                    securityURLs.append(repoURL)
+                }
                 let message = "Publish \(datasetId) v\(datasetVersion)"
-                gitMessages = try gitService.commitAndPush(files: filesToCommit, message: message, configuration: gitConfiguration)
+                try withSecurityScopedAccess(to: securityURLs) {
+                    gitMessages = try gitService.commitAndPush(files: filesToCommit, message: message, configuration: gitConfiguration)
+                }
                 gitOutput = gitMessages
+                if gitConfiguration.pushAutomatically {
+                    gitStatusMessage = "Committed and pushed changes to \(gitConfiguration.remote)/\(gitConfiguration.branch)."
+                } else {
+                    gitStatusMessage = "Committed changes to local repository."
+                }
             }
 
             statusMessage = "Published \(dataset.displayName) dataset"
             publishNotes = ""
         } catch {
+            if error is GitServiceError {
+                gitErrorMessage = error.localizedDescription
+            }
             errorMessage = error.localizedDescription
         }
     }
@@ -251,7 +316,9 @@ final class AppViewModel: ObservableObject {
     func reloadReleaseNotes() {
         guard let url = releaseNotesURL else { return }
         do {
-            let entries = try releaseNotesService.loadEntries(from: url)
+            let entries = try withSecurityScopedAccess(to: [url]) {
+                try releaseNotesService.loadEntries(from: url)
+            }
             releaseNoteEntries = entries
         } catch {
             errorMessage = error.localizedDescription
@@ -278,7 +345,9 @@ final class AppViewModel: ObservableObject {
 
     private func loadAmpLoad(from url: URL) {
         do {
-            let dataset = try fileService.loadAmpLoad(from: url)
+            let dataset = try withSecurityScopedAccess(to: [url]) {
+                try fileService.loadAmpLoad(from: url)
+            }
             applyAmpLoadDataset(dataset, url: url)
             statusMessage = "Loaded ampload.json"
             errorMessage = nil
@@ -289,7 +358,9 @@ final class AppViewModel: ObservableObject {
 
     private func loadPrealignment(from url: URL) {
         do {
-            let dataset = try fileService.loadPrealignment(from: url)
+            let dataset = try withSecurityScopedAccess(to: [url]) {
+                try fileService.loadPrealignment(from: url)
+            }
             applyPrealignmentDataset(dataset, url: url)
             statusMessage = "Loaded prealignment.json"
             errorMessage = nil
@@ -298,10 +369,10 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    private func presentOpenPanel(title: String, allowedFileTypes: [String]? = nil, completion: @escaping (URL) -> Void) {
+    private func presentOpenPanel(title: String, allowedFileTypes: [String]? = nil, canChooseDirectories: Bool = false, allowsFiles: Bool = true, completion: @escaping (URL) -> Void) {
         let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseFiles = allowsFiles
+        panel.canChooseDirectories = canChooseDirectories
         panel.allowsMultipleSelection = false
         panel.title = title
         panel.allowedFileTypes = allowedFileTypes
@@ -327,7 +398,7 @@ final class AppViewModel: ObservableObject {
         isRestoringState = true
         defer { isRestoringState = false }
 
-        if let storedAmpURL = defaults.url(forKey: DefaultsKeys.ampLoadFileURL) {
+        if let storedAmpURL = restoreURL(forKey: DefaultsKeys.ampLoadFileURL) {
             if FileManager.default.fileExists(atPath: storedAmpURL.path) {
                 loadAmpLoad(from: storedAmpURL)
             } else {
@@ -335,7 +406,7 @@ final class AppViewModel: ObservableObject {
             }
         }
 
-        if let storedPrealignmentURL = defaults.url(forKey: DefaultsKeys.prealignmentFileURL) {
+        if let storedPrealignmentURL = restoreURL(forKey: DefaultsKeys.prealignmentFileURL) {
             if FileManager.default.fileExists(atPath: storedPrealignmentURL.path) {
                 loadPrealignment(from: storedPrealignmentURL)
             } else {
@@ -343,11 +414,13 @@ final class AppViewModel: ObservableObject {
             }
         }
 
-        manifestURL = defaults.url(forKey: DefaultsKeys.manifestURL)
-        releaseNotesURL = defaults.url(forKey: DefaultsKeys.releaseNotesURL)
+        manifestURL = restoreURL(forKey: DefaultsKeys.manifestURL)
+        releaseNotesURL = restoreURL(forKey: DefaultsKeys.releaseNotesURL)
         if let releaseNotesURL, FileManager.default.fileExists(atPath: releaseNotesURL.path) {
             reloadReleaseNotes()
         }
+
+        gitRepositoryURL = restoreURL(forKey: DefaultsKeys.gitRepositoryURL)
 
         if let ampId = defaults.string(forKey: DefaultsKeys.ampLoadDatasetId) {
             ampLoadDatasetId = ampId
@@ -362,7 +435,8 @@ final class AppViewModel: ObservableObject {
             shouldUpdateManifestPath = defaults.bool(forKey: DefaultsKeys.shouldUpdateManifestPath)
         }
 
-        let repoPath = defaults.string(forKey: DefaultsKeys.gitRepositoryPath) ?? ""
+        var repoPath = defaults.string(forKey: DefaultsKeys.gitRepositoryPath) ?? ""
+        if let gitRepositoryURL { repoPath = gitRepositoryURL.path }
         let defaultGitConfiguration = GitConfiguration()
         let remote = defaults.string(forKey: DefaultsKeys.gitRemote) ?? defaultGitConfiguration.remote
         let branch = defaults.string(forKey: DefaultsKeys.gitBranch) ?? defaultGitConfiguration.branch
@@ -380,7 +454,12 @@ final class AppViewModel: ObservableObject {
     private func persistURL(_ url: URL?, key: String) {
         guard !isRestoringState else { return }
         if let url {
-            defaults.set(url, forKey: key)
+            do {
+                let data = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+                defaults.set(data, forKey: key)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         } else {
             defaults.removeObject(forKey: key)
         }
@@ -404,6 +483,86 @@ final class AppViewModel: ObservableObject {
         defaults.set(gitConfiguration.personalAccessToken, forKey: DefaultsKeys.gitToken)
         defaults.set(gitConfiguration.pushAutomatically, forKey: DefaultsKeys.gitPushAutomatically)
     }
+
+    private func restoreURL(forKey key: String) -> URL? {
+        if let bookmarkData = defaults.data(forKey: key) {
+            var isStale = false
+            do {
+                let url = try URL(resolvingBookmarkData: bookmarkData, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &isStale)
+                if isStale {
+                    let renewedData = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+                    defaults.set(renewedData, forKey: key)
+                }
+                return url
+            } catch {
+                defaults.removeObject(forKey: key)
+                errorMessage = error.localizedDescription
+                return nil
+            }
+        }
+
+        if let url = defaults.url(forKey: key) {
+            do {
+                let data = try url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+                defaults.removeObject(forKey: key)
+                defaults.set(data, forKey: key)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return url
+        }
+
+        return nil
+    }
+
+    private func withSecurityScopedAccess<T>(to urls: [URL], perform work: () throws -> T) rethrows -> T {
+        var accessed: [URL] = []
+        var seen = Set<String>()
+        for url in urls {
+            let insertion = seen.insert(url.path)
+            if insertion.inserted {
+                if url.startAccessingSecurityScopedResource() {
+                    accessed.append(url)
+                }
+            }
+        }
+        defer {
+            for url in accessed {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try work()
+    }
+
+    private func withSecurityScopedAccess<T>(to urls: [URL?], perform work: () throws -> T) rethrows -> T {
+        try withSecurityScopedAccess(to: urls.compactMap { $0 }, perform: work)
+    }
+
+    func testGitConnection() {
+        gitErrorMessage = nil
+        gitStatusMessage = ""
+        gitOutput.removeAll()
+
+        guard !gitConfiguration.repositoryPath.isEmpty else {
+            gitErrorMessage = "Set the repository path before testing."
+            return
+        }
+
+        do {
+            let output: String = try withSecurityScopedAccess(to: [gitRepositoryURL].compactMap { $0 }) {
+                try gitService.testConnection(configuration: gitConfiguration)
+            }
+            let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedOutput.isEmpty {
+                gitOutput = ["No remote refs returned."]
+            } else {
+                gitOutput = trimmedOutput.components(separatedBy: .newlines)
+            }
+            gitStatusMessage = "Successfully connected to \(gitConfiguration.remote)."
+        } catch {
+            gitErrorMessage = error.localizedDescription
+        }
+    }
 }
 
 private enum DefaultsKeys {
@@ -420,4 +579,5 @@ private enum DefaultsKeys {
     static let gitBranch = "GitBranch"
     static let gitToken = "GitToken"
     static let gitPushAutomatically = "GitPushAutomatically"
+    static let gitRepositoryURL = "GitRepositoryURL"
 }

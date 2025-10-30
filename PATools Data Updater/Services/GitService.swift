@@ -29,6 +29,22 @@ final class GitService {
         return outputs
     }
 
+    func testConnection(configuration: GitConfiguration) throws -> String {
+        guard !configuration.repositoryPath.isEmpty else {
+            throw GitServiceError.repositoryNotFound(path: configuration.repositoryPath)
+        }
+        var arguments = ["ls-remote"]
+        if let remoteWithCredentials = configuration.remoteWithCredentials {
+            arguments.append(remoteWithCredentials)
+        } else {
+            arguments.append(configuration.remote)
+        }
+        if !configuration.branch.isEmpty {
+            arguments.append(configuration.branch)
+        }
+        return try runGit(arguments: arguments, configuration: configuration)
+    }
+
     private func push(configuration: GitConfiguration) throws -> String {
         var arguments: [String] = ["push"]
         let remote = configuration.remoteWithCredentials

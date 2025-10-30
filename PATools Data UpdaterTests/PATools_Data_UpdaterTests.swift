@@ -80,9 +80,63 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         }
     }
 
+    func testGitServiceTestConnectionSucceeds() throws {
+        let service = GitService()
+        let workspace = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let repoDirectory = workspace.appendingPathComponent("working")
+        let remoteDirectory = workspace.appendingPathComponent("remote.git")
+        try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: remoteDirectory, withIntermediateDirectories: true)
+        try runGit(in: remoteDirectory, arguments: ["init", "--bare"])
+        try runGit(in: repoDirectory, arguments: ["init"])
+        try runGit(in: repoDirectory, arguments: ["config", "user.email", "tester@example.com"])
+        try runGit(in: repoDirectory, arguments: ["config", "user.name", "Tester"])
+        let readme = repoDirectory.appendingPathComponent("README.md")
+        if let data = "Hello".data(using: .utf8) {
+            try data.write(to: readme)
+        } else {
+            XCTFail("Failed to encode README contents")
+        }
+        try runGit(in: repoDirectory, arguments: ["add", "."])
+        try runGit(in: repoDirectory, arguments: ["commit", "-m", "Initial commit"])
+        try runGit(in: repoDirectory, arguments: ["branch", "-M", "main"])
+        try runGit(in: repoDirectory, arguments: ["remote", "add", "origin", remoteDirectory.path])
+        try runGit(in: repoDirectory, arguments: ["push", "-u", "origin", "main"])
+
+        let configuration = GitConfiguration(repositoryPath: repoDirectory.path, remote: "origin", branch: "main")
+        let output = try service.testConnection(configuration: configuration)
+        XCTAssertTrue(output.contains("refs/heads/main"))
+    }
+
     private func temporaryURL(named name: String) -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent(name)
+    }
+
+    private func temporaryDirectory() -> URL {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    @discardableResult
+    private func runGit(in directory: URL, arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["git"] + arguments
+        process.currentDirectoryURL = directory
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: data, encoding: .utf8) ?? ""
+        if process.terminationStatus != 0 {
+            throw NSError(domain: "GitTest", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: output])
+        }
+        return output
     }
 }

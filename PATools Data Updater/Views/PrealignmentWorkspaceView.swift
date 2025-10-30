@@ -98,6 +98,14 @@ struct PrealignmentWorkspaceView: View {
                     Text(error)
                         .foregroundColor(.red)
                 }
+                if let gitError = viewModel.gitErrorMessage {
+                    Text(gitError)
+                        .foregroundColor(.red)
+                }
+                if !viewModel.gitStatusMessage.isEmpty {
+                    Text(viewModel.gitStatusMessage)
+                        .foregroundColor(.blue)
+                }
                 if !viewModel.validationMessages.isEmpty {
                     ForEach(viewModel.validationMessages) { issue in
                         Text("• \(issue.message)")

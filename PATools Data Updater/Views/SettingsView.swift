@@ -24,11 +24,41 @@ struct SettingsView: View {
             }
 
             Section(header: Text("Git")) {
-                TextField("Repository Path", text: $viewModel.gitConfiguration.repositoryPath)
+                HStack {
+                    TextField("Repository Path", text: $viewModel.gitConfiguration.repositoryPath)
+                    Button("Browse…") { viewModel.selectGitRepository() }
+                }
+                if !viewModel.gitConfiguration.repositoryPath.isEmpty {
+                    Label(viewModel.gitConfiguration.repositoryPath, systemImage: "externaldrive")
+                        .font(.footnote)
+                }
                 TextField("Remote", text: $viewModel.gitConfiguration.remote)
                 TextField("Branch", text: $viewModel.gitConfiguration.branch)
                 SecureField("Personal Access Token", text: $viewModel.gitConfiguration.personalAccessToken)
                 Toggle("Push automatically", isOn: $viewModel.gitConfiguration.pushAutomatically)
+                Button("Test Connection") { viewModel.testGitConnection() }
+                    .buttonStyle(.bordered)
+                if let gitError = viewModel.gitErrorMessage {
+                    Text(gitError)
+                        .foregroundColor(.red)
+                }
+                if !viewModel.gitStatusMessage.isEmpty {
+                    Text(viewModel.gitStatusMessage)
+                        .foregroundColor(.green)
+                }
+                if !viewModel.gitOutput.isEmpty {
+                    GroupBox("Git Output") {
+                        ScrollView {
+                            VStack(alignment: .leading) {
+                                ForEach(viewModel.gitOutput, id: \.self) { line in
+                                    Text(line)
+                                        .font(.footnote)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 120)
+                    }
+                }
             }
         }
         .padding()
