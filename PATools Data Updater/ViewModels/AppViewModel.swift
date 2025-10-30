@@ -67,28 +67,40 @@ final class AppViewModel: ObservableObject {
 
     func selectAmpLoadFile() {
         presentOpenPanel(title: "Select ampload.json", allowedFileTypes: ["json"]) { [weak self] url in
-            guard let self else { return }
-            do {
-                let dataset = try self.fileService.loadAmpLoad(from: url)
-                self.applyAmpLoadDataset(dataset, url: url)
-                self.statusMessage = "Loaded ampload.json"
-            } catch {
-                self.errorMessage = error.localizedDescription
-            }
+            self?.loadAmpLoad(from: url)
         }
+    }
+
+    func loadAmpLoad(fromPath path: String) {
+        guard !path.isEmpty else { return }
+        loadAmpLoad(from: URL(fileURLWithPath: path))
+    }
+
+    func reloadAmpLoadFromDisk() {
+        guard let url = ampLoadFileURL else {
+            errorMessage = "Select an ampload.json file first."
+            return
+        }
+        loadAmpLoad(from: url)
     }
 
     func selectPrealignmentFile() {
         presentOpenPanel(title: "Select prealignment.json", allowedFileTypes: ["json"]) { [weak self] url in
-            guard let self else { return }
-            do {
-                let dataset = try self.fileService.loadPrealignment(from: url)
-                self.applyPrealignmentDataset(dataset, url: url)
-                self.statusMessage = "Loaded prealignment.json"
-            } catch {
-                self.errorMessage = error.localizedDescription
-            }
+            self?.loadPrealignment(from: url)
         }
+    }
+
+    func loadPrealignment(fromPath path: String) {
+        guard !path.isEmpty else { return }
+        loadPrealignment(from: URL(fileURLWithPath: path))
+    }
+
+    func reloadPrealignmentFromDisk() {
+        guard let url = prealignmentFileURL else {
+            errorMessage = "Select a prealignment.json file first."
+            return
+        }
+        loadPrealignment(from: url)
     }
 
     func selectManifestFile() {
@@ -231,6 +243,28 @@ final class AppViewModel: ObservableObject {
         suppressPreDirtyFlag = false
         prealignmentFileURL = url
         prealignmentDirty = false
+    }
+
+    private func loadAmpLoad(from url: URL) {
+        do {
+            let dataset = try fileService.loadAmpLoad(from: url)
+            applyAmpLoadDataset(dataset, url: url)
+            statusMessage = "Loaded ampload.json"
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loadPrealignment(from url: URL) {
+        do {
+            let dataset = try fileService.loadPrealignment(from: url)
+            applyPrealignmentDataset(dataset, url: url)
+            statusMessage = "Loaded prealignment.json"
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func presentOpenPanel(title: String, allowedFileTypes: [String]? = nil, completion: @escaping (URL) -> Void) {

@@ -19,7 +19,7 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 
 ## Configuring Paths
 
-1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Open** toolbar button to select `ampload.json` or `prealignment.json` respectively.
+1. **Dataset files** – Open the Amp Load or Pre-alignment workspace and use the **Browse…** control in the metadata section (or the **Open** toolbar button) to load an existing `ampload.json` or `prealignment.json`. Once selected you can reload from disk at any time with the **Reload** button.
 2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`.
 3. **Release notes** – Switch to **Release Notes** and choose the `ReleaseNotes.md` file. New publish actions append entries automatically.
 

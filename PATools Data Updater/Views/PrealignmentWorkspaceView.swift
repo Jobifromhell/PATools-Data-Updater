@@ -39,6 +39,7 @@ struct PrealignmentWorkspaceView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 200)
                 }
+                datasetFileRow
                 if let path = viewModel.prealignmentFileURL?.path {
                     Label(path, systemImage: "doc.text")
                         .font(.footnote)
@@ -127,6 +128,21 @@ struct PrealignmentWorkspaceView: View {
     private func addCombo() {
         withAnimation {
             viewModel.prealignmentDataset.combos.append(PrealignmentCombo())
+        }
+    }
+
+    private var datasetFileRow: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("Dataset File")
+                Text(viewModel.prealignmentFileURL?.lastPathComponent ?? "No file selected")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button("Browse…") { viewModel.selectPrealignmentFile() }
+            Button("Reload") { viewModel.reloadPrealignmentFromDisk() }
+                .disabled(viewModel.prealignmentFileURL == nil)
         }
     }
 }

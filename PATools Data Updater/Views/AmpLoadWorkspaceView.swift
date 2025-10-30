@@ -39,6 +39,7 @@ struct AmpLoadWorkspaceView: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 200)
                 }
+                datasetFileRow
                 if let path = viewModel.ampLoadFileURL?.path {
                     Label(path, systemImage: "doc.text")
                         .font(.footnote)
@@ -142,6 +143,21 @@ struct AmpLoadWorkspaceView: View {
             copy.id = UUID()
             copy.name += " Copy"
             viewModel.ampLoadDataset.amplifiers.append(copy)
+        }
+    }
+
+    private var datasetFileRow: some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text("Dataset File")
+                Text(viewModel.ampLoadFileURL?.lastPathComponent ?? "No file selected")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
+            Button("Browse…") { viewModel.selectAmpLoadFile() }
+            Button("Reload") { viewModel.reloadAmpLoadFromDisk() }
+                .disabled(viewModel.ampLoadFileURL == nil)
         }
     }
 }
