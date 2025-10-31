@@ -172,6 +172,12 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func selectGitExecutable() {
+        presentOpenPanel(title: "Select git Executable", canChooseDirectories: false, allowsFiles: true) { [weak self] url in
+            self?.gitConfiguration.gitExecutablePath = url.path
+        }
+    }
+
     func saveAmpLoad() {
         guard let url = ampLoadFileURL else {
             errorMessage = "Select an ampload.json file first."
@@ -290,6 +296,9 @@ final class AppViewModel: ObservableObject {
                 var securityURLs = filesToCommit
                 if let repoURL = gitRepositoryURL {
                     securityURLs.append(repoURL)
+                }
+                if let executableURL = gitExecutableURL() {
+                    securityURLs.append(executableURL)
                 }
                 let message = "Publish \(datasetId) v\(datasetVersion)"
                 try withSecurityScopedAccess(to: securityURLs) {
@@ -441,13 +450,15 @@ final class AppViewModel: ObservableObject {
         let remote = defaults.string(forKey: DefaultsKeys.gitRemote) ?? defaultGitConfiguration.remote
         let branch = defaults.string(forKey: DefaultsKeys.gitBranch) ?? defaultGitConfiguration.branch
         let token = defaults.string(forKey: DefaultsKeys.gitToken) ?? ""
+        let executablePath = defaults.string(forKey: DefaultsKeys.gitExecutablePath) ?? ""
         let pushAutomatically = defaults.object(forKey: DefaultsKeys.gitPushAutomatically) as? Bool ?? defaultGitConfiguration.pushAutomatically
         gitConfiguration = GitConfiguration(
             repositoryPath: repoPath,
             remote: remote,
             branch: branch,
             personalAccessToken: token,
-            pushAutomatically: pushAutomatically
+            pushAutomatically: pushAutomatically,
+            gitExecutablePath: executablePath
         )
     }
 
@@ -482,6 +493,7 @@ final class AppViewModel: ObservableObject {
         defaults.set(gitConfiguration.branch, forKey: DefaultsKeys.gitBranch)
         defaults.set(gitConfiguration.personalAccessToken, forKey: DefaultsKeys.gitToken)
         defaults.set(gitConfiguration.pushAutomatically, forKey: DefaultsKeys.gitPushAutomatically)
+        defaults.set(gitConfiguration.gitExecutablePath, forKey: DefaultsKeys.gitExecutablePath)
     }
 
     private func restoreURL(forKey key: String) -> URL? {
@@ -538,6 +550,12 @@ final class AppViewModel: ObservableObject {
         try withSecurityScopedAccess(to: urls.compactMap { $0 }, perform: work)
     }
 
+    private func gitExecutableURL() -> URL? {
+        let trimmed = gitConfiguration.gitExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return URL(fileURLWithPath: trimmed)
+    }
+
     func testGitConnection() {
         gitErrorMessage = nil
         gitStatusMessage = ""
@@ -549,7 +567,10 @@ final class AppViewModel: ObservableObject {
         }
 
         do {
-            let output: String = try withSecurityScopedAccess(to: [gitRepositoryURL].compactMap { $0 }) {
+            var securityURLs: [URL] = []
+            if let repoURL = gitRepositoryURL { securityURLs.append(repoURL) }
+            if let executableURL = gitExecutableURL() { securityURLs.append(executableURL) }
+            let output: String = try withSecurityScopedAccess(to: securityURLs) {
                 try gitService.testConnection(configuration: gitConfiguration)
             }
             let trimmedOutput = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -580,4 +601,5 @@ private enum DefaultsKeys {
     static let gitToken = "GitToken"
     static let gitPushAutomatically = "GitPushAutomatically"
     static let gitRepositoryURL = "GitRepositoryURL"
+    static let gitExecutablePath = "GitExecutablePath"
 }

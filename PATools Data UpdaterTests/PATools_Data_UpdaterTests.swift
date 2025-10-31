@@ -109,6 +109,55 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         XCTAssertTrue(output.contains("refs/heads/main"))
     }
 
+    func testGitServiceMissingExecutableShowsHelpfulError() throws {
+        let service = GitService()
+        let workspace = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let repoDirectory = workspace.appendingPathComponent("repo")
+        try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
+        let missingPath = workspace.appendingPathComponent("missing/git").path
+        let configuration = GitConfiguration(
+            repositoryPath: repoDirectory.path,
+            remote: "origin",
+            branch: "main",
+            gitExecutablePath: missingPath
+        )
+        XCTAssertThrowsError(try service.testConnection(configuration: configuration)) { error in
+            guard case let GitServiceError.gitExecutableNotFound(path) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, missingPath)
+        }
+    }
+
+    func testGitServiceReportsSandboxBlockedExecutable() throws {
+        let service = GitService()
+        let workspace = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let repoDirectory = workspace.appendingPathComponent("repo")
+        try FileManager.default.createDirectory(at: repoDirectory, withIntermediateDirectories: true)
+        let fakeGit = workspace.appendingPathComponent("fakegit.sh")
+        let script = """
+        #!/bin/sh
+        echo "xcrun: error: cannot be used within an App Sandbox." 1>&2
+        exit 1
+        """
+        try script.write(to: fakeGit, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeGit.path)
+        let configuration = GitConfiguration(
+            repositoryPath: repoDirectory.path,
+            remote: "origin",
+            branch: "main",
+            gitExecutablePath: fakeGit.path
+        )
+        XCTAssertThrowsError(try service.testConnection(configuration: configuration)) { error in
+            guard case let GitServiceError.gitExecutableBlockedBySandbox(output) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(output.contains("App Sandbox"))
+        }
+    }
+
     private func temporaryURL(named name: String) -> URL {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

@@ -6,17 +6,28 @@ struct GitConfiguration: Equatable {
     var branch: String
     var personalAccessToken: String
     var pushAutomatically: Bool
+    var gitExecutablePath: String
 
-    init(repositoryPath: String = "", remote: String = "origin", branch: String = "main", personalAccessToken: String = "", pushAutomatically: Bool = false) {
+    init(
+        repositoryPath: String = "",
+        remote: String = "origin",
+        branch: String = "main",
+        personalAccessToken: String = "",
+        pushAutomatically: Bool = false,
+        gitExecutablePath: String = ""
+    ) {
         self.repositoryPath = repositoryPath
         self.remote = remote
         self.branch = branch
         self.personalAccessToken = personalAccessToken
         self.pushAutomatically = pushAutomatically
+        self.gitExecutablePath = gitExecutablePath
     }
 }
 
 final class GitService {
+    private var cachedExecutableURL: URL?
+
     func commitAndPush(files: [URL], message: String, configuration: GitConfiguration) throws -> [String] {
         guard !configuration.repositoryPath.isEmpty else { return [] }
         var outputs: [String] = []
@@ -62,8 +73,9 @@ final class GitService {
             throw GitServiceError.repositoryNotFound(path: configuration.repositoryPath)
         }
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git"] + arguments
+        let executableURL = try resolveGitExecutable(from: configuration)
+        process.executableURL = executableURL
+        process.arguments = arguments
         process.currentDirectoryURL = URL(fileURLWithPath: configuration.repositoryPath)
         var environment = ProcessInfo.processInfo.environment
         environment["GIT_TERMINAL_PROMPT"] = "0"
@@ -87,9 +99,41 @@ final class GitService {
         let output = String(data: data, encoding: .utf8) ?? ""
 
         if process.terminationStatus != 0 {
+            if output.lowercased().contains("xcrun: error:") {
+                self.cachedExecutableURL = nil
+                throw GitServiceError.gitExecutableBlockedBySandbox(output: output)
+            }
             throw GitServiceError.commandFailed(arguments: arguments, output: output)
         }
         return output
+    }
+
+    private func resolveGitExecutable(from configuration: GitConfiguration) throws -> URL {
+        if let cachedExecutableURL, FileManager.default.isExecutableFile(atPath: cachedExecutableURL.path) {
+            if configuration.gitExecutablePath.isEmpty || cachedExecutableURL.path == configuration.gitExecutablePath {
+                return cachedExecutableURL
+            } else {
+                self.cachedExecutableURL = nil
+            }
+        }
+
+        let fileManager = FileManager.default
+        var candidates: [String] = []
+        if let explicitPath = configuration.effectiveGitExecutablePath {
+            guard fileManager.isExecutableFile(atPath: explicitPath) else {
+                throw GitServiceError.gitExecutableNotFound(explicitPath)
+            }
+            candidates.append(explicitPath)
+        }
+        candidates.append(contentsOf: GitService.defaultGitExecutableCandidates)
+
+        for path in candidates where fileManager.isExecutableFile(atPath: path) {
+            let url = URL(fileURLWithPath: path)
+            self.cachedExecutableURL = url
+            return url
+        }
+
+        throw GitServiceError.gitExecutableNotFound(configuration.gitExecutablePath)
     }
 }
 
@@ -104,12 +148,19 @@ private extension GitConfiguration {
         components.password = personalAccessToken
         return components.url?.absoluteString
     }
+
+    var effectiveGitExecutablePath: String? {
+        let trimmed = gitExecutablePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }
 
 enum GitServiceError: LocalizedError {
     case commandFailed(arguments: [String], output: String)
     case repositoryNotFound(path: String)
     case processLaunchFailed(underlyingError: Error)
+    case gitExecutableNotFound(String)
+    case gitExecutableBlockedBySandbox(output: String)
 
     var errorDescription: String? {
         switch self {
@@ -119,6 +170,25 @@ enum GitServiceError: LocalizedError {
             return "Git repository not found at path: \(path). Update the repository path in Settings."
         case let .processLaunchFailed(error):
             return "Failed to launch git: \(error.localizedDescription)"
+        case let .gitExecutableNotFound(path):
+            if path.isEmpty {
+                return "Git executable not found. Set the Git executable path in Settings to a non-sandboxed git binary (for example, /Library/Developer/CommandLineTools/usr/bin/git)."
+            } else {
+                return "Git executable not found at \(path). Choose a valid git binary in Settings."
+            }
+        case let .gitExecutableBlockedBySandbox(output):
+            return "The selected git binary is blocked by the App Sandbox: \(output). Choose a Command Line Tools git binary (e.g. /Library/Developer/CommandLineTools/usr/bin/git) in Settings."
         }
     }
+}
+
+private extension GitService {
+    static let defaultGitExecutableCandidates: [String] = [
+        "/Library/Developer/CommandLineTools/usr/bin/git",
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+        "/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core/git",
+        "/usr/local/bin/git",
+        "/opt/homebrew/bin/git",
+        "/usr/bin/git"
+    ]
 }

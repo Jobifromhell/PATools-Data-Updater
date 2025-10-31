@@ -35,6 +35,12 @@ struct SettingsView: View {
                 TextField("Remote", text: $viewModel.gitConfiguration.remote)
                 TextField("Branch", text: $viewModel.gitConfiguration.branch)
                 SecureField("Personal Access Token", text: $viewModel.gitConfiguration.personalAccessToken)
+                HStack {
+                    TextField("Git Executable", text: $viewModel.gitConfiguration.gitExecutablePath)
+                    Button("Choose…") { viewModel.selectGitExecutable() }
+                }
+                Text("Use the Command Line Tools git binary (for example, /Library/Developer/CommandLineTools/usr/bin/git) to avoid sandbox xcrun errors.")
+                    .font(.footnote)
                 Toggle("Push automatically", isOn: $viewModel.gitConfiguration.pushAutomatically)
                 Button("Test Connection") { viewModel.testGitConnection() }
                     .buttonStyle(.bordered)

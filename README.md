@@ -25,6 +25,7 @@ The **PA Tools Dataset Publisher** is a SwiftUI-based macOS utility that helps m
 2. **Manifest file** – Navigate to **Settings** and either paste the full path or use **Choose…** to locate `manifest.json`. Selecting the file via the picker is recommended so the sandbox retains permission after relaunches.
 3. **Release notes** – Switch to **Release Notes** and choose the `ReleaseNotes.md` file. New publish actions append entries automatically, and the viewer restores the last used file the next time the app starts.
 4. **Git repository** – In **Settings** use **Browse…** next to the repository path to grant the app access to the working copy. The chosen directory is stored securely and reused each time you reopen the app.
+5. **Git executable** – Still in **Settings**, either paste the path to a standalone git binary or use **Choose…** to point at the Command Line Tools git (for example, `/Library/Developer/CommandLineTools/usr/bin/git`). The sandbox cannot launch the developer tool shim located at `/usr/bin/git`, so providing the Command Line Tools binary avoids the `xcrun` sandbox error during connection tests and publishes.
 
 ## Editing Data
 
@@ -52,6 +53,7 @@ Configure Git settings in **Settings**:
 - **Remote** – Remote name or HTTPS URL. When an HTTPS URL is provided, the personal access token (PAT) is embedded automatically.
 - **Branch** – Target branch for pushes.
 - **Personal Access Token** – Optional PAT used to authenticate pushes over HTTPS. When an HTTPS remote is detected the app embeds the token alongside the `x-access-token` user so GitHub fine-grained tokens work without additional configuration.
+- **Git Executable** – Path to the git binary the sandbox may run. Choose the Command Line Tools binary (`/Library/Developer/CommandLineTools/usr/bin/git`) or another non-sandboxed git installation (such as Homebrew’s `/usr/local/bin/git`).
 - **Push automatically** – Enable to push after each publish. Otherwise only commits are created.
 - **Test Connection** – Runs `git ls-remote` against the configured remote to confirm connectivity and credentials. Output and success/failure messages appear directly in Settings.
 
