@@ -69,6 +69,20 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         XCTAssertEqual(manifest.datasets["ampload"]?.version, "2.0")
     }
 
+    func testMalformedManifestReportsPathAndDecodingMessage() throws {
+        let url = temporaryURL(named: "manifest.json")
+        try "{ invalid json ]".data(using: .utf8)!.write(to: url)
+
+        XCTAssertThrowsError(try DatasetFileService().loadManifest(from: url)) { error in
+            guard case let DatasetFileServiceError.manifestDecodingFailed(path, message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, url.path)
+            XCTAssertTrue(message.contains("not valid JSON"))
+            XCTAssertTrue(error.localizedDescription.contains(url.path))
+        }
+    }
+
     func testGitServiceRepositoryMissingShowsHelpfulError() {
         let service = GitService()
         let configuration = GitConfiguration(repositoryPath: "/tmp/does/not/exist", remote: "origin", branch: "main")

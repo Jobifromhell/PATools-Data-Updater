@@ -318,7 +318,11 @@ final class AppViewModel: ObservableObject {
             if error is GitServiceError {
                 gitErrorMessage = error.localizedDescription
             }
-            errorMessage = error.localizedDescription
+            if let fileError = error as? DatasetFileServiceError {
+                errorMessage = fileError.localizedDescription
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

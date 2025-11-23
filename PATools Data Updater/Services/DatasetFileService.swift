@@ -32,11 +32,42 @@ final class DatasetFileService {
 
     func loadManifest(from url: URL) throws -> Manifest {
         let data = try Data(contentsOf: url)
-        return try decoder.decode(Manifest.self, from: data)
+        do {
+            return try decoder.decode(Manifest.self, from: data)
+        } catch let decodingError as DecodingError {
+            let message = decodingMessage(from: decodingError)
+            throw DatasetFileServiceError.manifestDecodingFailed(path: url.path, message: message)
+        }
     }
 
     func saveManifest(_ manifest: Manifest, to url: URL) throws {
         let data = try encoder.encode(manifest)
         try data.write(to: url, options: .atomic)
+    }
+
+    private func decodingMessage(from error: DecodingError) -> String {
+        switch error {
+        case let .dataCorrupted(context):
+            return context.debugDescription
+        case let .keyNotFound(key, context):
+            return "Missing key '\(key.stringValue)': \(context.debugDescription)"
+        case let .typeMismatch(type, context):
+            return "Type mismatch for \(type): \(context.debugDescription)"
+        case let .valueNotFound(type, context):
+            return "Missing value for \(type): \(context.debugDescription)"
+        @unknown default:
+            return error.localizedDescription
+        }
+    }
+}
+
+enum DatasetFileServiceError: LocalizedError {
+    case manifestDecodingFailed(path: String, message: String)
+
+    var errorDescription: String? {
+        switch self {
+        case let .manifestDecodingFailed(path, message):
+            return "Failed to decode manifest at \(path): \(message)"
+        }
     }
 }
