@@ -69,6 +69,31 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         XCTAssertEqual(manifest.datasets["ampload"]?.version, "2.0")
     }
 
+    func testManifestDecodingSupportsDatasetsArrayFormat() throws {
+        let json = """
+        {
+          "datasets": [
+            {
+              "id": "ampload",
+              "path": "/tmp/ampload.json",
+              "version": "2.0",
+              "checksum": "abc123"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+
+        let manifest = try DatasetFileService().loadManifest(from: url)
+
+        XCTAssertEqual(manifest.datasets.count, 1)
+        let entry = manifest.datasets["ampload"]
+        XCTAssertEqual(entry?.version, "2.0")
+        XCTAssertEqual(entry?.path, "/tmp/ampload.json")
+        XCTAssertEqual(entry?.checksum, "abc123")
+    }
+
     func testMalformedManifestReportsPathAndDecodingMessage() throws {
         let url = temporaryURL(named: "manifest.json")
         try "{ invalid json ]".data(using: .utf8)!.write(to: url)

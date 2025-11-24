@@ -9,9 +9,19 @@ struct Manifest: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         if let keyedContainer = try? decoder.container(keyedBy: CodingKeys.self), keyedContainer.contains(.datasets) {
-            let dictionary = try keyedContainer.decode([String: ManifestEntry].self, forKey: .datasets)
-            self.datasets = dictionary
-            return
+            if let dictionary = try? keyedContainer.decode([String: ManifestEntry].self, forKey: .datasets) {
+                self.datasets = dictionary
+                return
+            }
+
+            if let legacyArray = try? keyedContainer.decode([LegacyManifestEntry].self, forKey: .datasets) {
+                self.datasets = Manifest.dictionary(from: legacyArray)
+                return
+            }
+
+            let codingPath = keyedContainer.codingPath + [CodingKeys.datasets]
+            let context = DecodingError.Context(codingPath: codingPath, debugDescription: "Unsupported manifest datasets format")
+            throw DecodingError.dataCorrupted(context)
         }
 
         if let dynamicContainer = try? decoder.container(keyedBy: DynamicCodingKey.self) {
@@ -28,10 +38,7 @@ struct Manifest: Codable, Equatable {
 
         let container = try decoder.singleValueContainer()
         if let legacyArray = try? container.decode([LegacyManifestEntry].self) {
-            let dictionary = Dictionary(uniqueKeysWithValues: legacyArray.map { entry in
-                (entry.id, ManifestEntry(path: entry.path, version: entry.version, checksum: entry.checksum))
-            })
-            self.datasets = dictionary
+            self.datasets = Manifest.dictionary(from: legacyArray)
         } else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unsupported manifest format")
         }
@@ -72,6 +79,14 @@ private struct LegacyManifestEntry: Codable {
     var path: String
     var version: String
     var checksum: String
+}
+
+private extension Manifest {
+    static func dictionary(from legacyArray: [LegacyManifestEntry]) -> [String: ManifestEntry] {
+        Dictionary(uniqueKeysWithValues: legacyArray.map { entry in
+            (entry.id, ManifestEntry(path: entry.path, version: entry.version, checksum: entry.checksum))
+        })
+    }
 }
 
 private struct DynamicCodingKey: CodingKey {
