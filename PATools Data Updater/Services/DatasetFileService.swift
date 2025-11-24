@@ -53,7 +53,7 @@ final class DatasetFileService {
             let base = "Missing key '\(key.stringValue)': \(context.debugDescription)"
             return appendCodingPath(to: base, codingPath: context.codingPath)
         case let .typeMismatch(type, context):
-            if let manifestMessage = manifestTypeMismatchMessage(context: context) {
+            if let manifestMessage = manifestTypeMismatchMessage(type: type, context: context) {
                 return manifestMessage
             }
             let base = "Type mismatch for \(type): \(context.debugDescription)"
@@ -84,12 +84,15 @@ final class DatasetFileService {
         }.joined(separator: ".")
     }
 
-    private func manifestTypeMismatchMessage(context: DecodingError.Context) -> String? {
+    private func manifestTypeMismatchMessage(type: Any.Type, context: DecodingError.Context) -> String? {
         guard let codingPath = codingPathDescription(from: context.codingPath), codingPath == "datasets" else {
             return nil
         }
-        let expected = "Expected 'datasets' to be a dictionary keyed by dataset ids"
-        let base = "\(expected): \(context.debugDescription)"
+        let example = "{ \"ampload\": { \"path\": \"/path/to/ampload.json\", \"version\": \"1.0\", \"checksum\": \"abc123\" } }"
+        let expected = "Expected 'datasets' to be a dictionary keyed by dataset ids (e.g., \(example))"
+        let foundArrayMessage = "Found an array instead; update 'datasets' to map ids to manifest entries."
+        let detail = context.debugDescription.contains("array") ? foundArrayMessage : "Type mismatch for \(type): \(context.debugDescription)"
+        let base = "\(expected). \(detail)"
         return appendCodingPath(to: base, codingPath: context.codingPath)
     }
 }

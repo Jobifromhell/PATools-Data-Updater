@@ -125,6 +125,7 @@ final class PATools_Data_UpdaterTests: XCTestCase {
             XCTAssertTrue(message.contains("datasets"))
             XCTAssertTrue(message.contains("dictionary"))
             XCTAssertTrue(message.contains("array"))
+            XCTAssertTrue(message.contains("ampload"))
         }
     }
 
