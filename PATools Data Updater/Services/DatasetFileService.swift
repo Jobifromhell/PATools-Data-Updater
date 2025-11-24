@@ -48,16 +48,37 @@ final class DatasetFileService {
     private func decodingMessage(from error: DecodingError) -> String {
         switch error {
         case let .dataCorrupted(context):
-            return context.debugDescription
+            return appendCodingPath(to: context.debugDescription, codingPath: context.codingPath)
         case let .keyNotFound(key, context):
-            return "Missing key '\(key.stringValue)': \(context.debugDescription)"
+            let base = "Missing key '\(key.stringValue)': \(context.debugDescription)"
+            return appendCodingPath(to: base, codingPath: context.codingPath)
         case let .typeMismatch(type, context):
-            return "Type mismatch for \(type): \(context.debugDescription)"
+            let base = "Type mismatch for \(type): \(context.debugDescription)"
+            return appendCodingPath(to: base, codingPath: context.codingPath)
         case let .valueNotFound(type, context):
-            return "Missing value for \(type): \(context.debugDescription)"
+            let base = "Missing value for \(type): \(context.debugDescription)"
+            return appendCodingPath(to: base, codingPath: context.codingPath)
         @unknown default:
             return error.localizedDescription
         }
+    }
+
+    private func appendCodingPath(to message: String, codingPath: [CodingKey]) -> String {
+        guard let path = codingPathDescription(from: codingPath) else {
+            return message
+        }
+        return "\(message) at coding path '\(path)'"
+    }
+
+    private func codingPathDescription(from codingPath: [CodingKey]) -> String? {
+        guard !codingPath.isEmpty else { return nil }
+        return codingPath.map { key in
+            if let index = key.intValue {
+                return "[\(index)]"
+            } else {
+                return key.stringValue
+            }
+        }.joined(separator: ".")
     }
 }
 
