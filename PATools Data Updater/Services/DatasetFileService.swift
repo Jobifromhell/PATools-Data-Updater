@@ -53,6 +53,9 @@ final class DatasetFileService {
             let base = "Missing key '\(key.stringValue)': \(context.debugDescription)"
             return appendCodingPath(to: base, codingPath: context.codingPath)
         case let .typeMismatch(type, context):
+            if let manifestMessage = manifestTypeMismatchMessage(context: context) {
+                return manifestMessage
+            }
             let base = "Type mismatch for \(type): \(context.debugDescription)"
             return appendCodingPath(to: base, codingPath: context.codingPath)
         case let .valueNotFound(type, context):
@@ -79,6 +82,15 @@ final class DatasetFileService {
                 return key.stringValue
             }
         }.joined(separator: ".")
+    }
+
+    private func manifestTypeMismatchMessage(context: DecodingError.Context) -> String? {
+        guard let codingPath = codingPathDescription(from: context.codingPath), codingPath == "datasets" else {
+            return nil
+        }
+        let expected = "Expected 'datasets' to be a dictionary keyed by dataset ids"
+        let base = "\(expected): \(context.debugDescription)"
+        return appendCodingPath(to: base, codingPath: context.codingPath)
     }
 }
 

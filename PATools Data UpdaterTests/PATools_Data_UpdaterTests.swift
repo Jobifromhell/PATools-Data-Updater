@@ -108,6 +108,26 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         }
     }
 
+    func testManifestDatasetsArrayReportsHelpfulTypeMismatchMessage() throws {
+        let json = """
+        {
+          "datasets": []
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+
+        XCTAssertThrowsError(try DatasetFileService().loadManifest(from: url)) { error in
+            guard case let DatasetFileServiceError.manifestDecodingFailed(path, message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, url.path)
+            XCTAssertTrue(message.contains("datasets"))
+            XCTAssertTrue(message.contains("dictionary"))
+            XCTAssertTrue(message.contains("array"))
+        }
+    }
+
     func testGitServiceRepositoryMissingShowsHelpfulError() {
         let service = GitService()
         let configuration = GitConfiguration(repositoryPath: "/tmp/does/not/exist", remote: "origin", branch: "main")
