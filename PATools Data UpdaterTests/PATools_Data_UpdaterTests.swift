@@ -69,6 +69,91 @@ final class PATools_Data_UpdaterTests: XCTestCase {
         XCTAssertEqual(manifest.datasets["ampload"]?.version, "2.0")
     }
 
+    func testManifestDecodingSupportsDatasetsArrayFormat() throws {
+        let json = """
+        {
+          "datasets": [
+            {
+              "id": "ampload",
+              "path": "/tmp/ampload.json",
+              "version": "2.0",
+              "checksum": "abc123"
+            }
+          ]
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+
+        let manifest = try DatasetFileService().loadManifest(from: url)
+
+        XCTAssertEqual(manifest.datasets.count, 1)
+        let entry = manifest.datasets["ampload"]
+        XCTAssertEqual(entry?.version, "2.0")
+        XCTAssertEqual(entry?.path, "/tmp/ampload.json")
+        XCTAssertEqual(entry?.checksum, "abc123")
+    }
+
+    func testMalformedManifestReportsPathAndDecodingMessage() throws {
+        let url = temporaryURL(named: "manifest.json")
+        try "{ invalid json ]".data(using: .utf8)!.write(to: url)
+
+        XCTAssertThrowsError(try DatasetFileService().loadManifest(from: url)) { error in
+            guard case let DatasetFileServiceError.manifestDecodingFailed(path, message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, url.path)
+            XCTAssertTrue(message.contains("not valid JSON"))
+            XCTAssertTrue(error.localizedDescription.contains(url.path))
+        }
+    }
+
+    func testManifestDecodingErrorIncludesCodingPathContext() throws {
+        let json = """
+        {
+          "datasets": {
+            "ampload": {
+              "path": "/tmp/ampload.json",
+              "version": [],
+              "checksum": "abc123"
+            }
+          }
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+
+        XCTAssertThrowsError(try DatasetFileService().loadManifest(from: url)) { error in
+            guard case let DatasetFileServiceError.manifestDecodingFailed(path, message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, url.path)
+            XCTAssertTrue(message.contains("datasets.ampload.version"))
+            XCTAssertTrue(message.contains("Type mismatch"))
+        }
+    }
+
+    func testManifestDatasetsArrayReportsHelpfulTypeMismatchMessage() throws {
+        let json = """
+        {
+          "datasets": []
+        }
+        """.data(using: .utf8)!
+        let url = temporaryURL(named: "manifest.json")
+        try json.write(to: url)
+
+        XCTAssertThrowsError(try DatasetFileService().loadManifest(from: url)) { error in
+            guard case let DatasetFileServiceError.manifestDecodingFailed(path, message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(path, url.path)
+            XCTAssertTrue(message.contains("datasets"))
+            XCTAssertTrue(message.contains("dictionary"))
+            XCTAssertTrue(message.contains("array"))
+            XCTAssertTrue(message.contains("ampload"))
+        }
+    }
+
     func testGitServiceRepositoryMissingShowsHelpfulError() {
         let service = GitService()
         let configuration = GitConfiguration(repositoryPath: "/tmp/does/not/exist", remote: "origin", branch: "main")
